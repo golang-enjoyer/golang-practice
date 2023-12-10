@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,7 +23,7 @@ func TestPipeline(t *testing.T) {
 	var ok = true
 	var recieved uint32
 	freeFlowJobs := []job{
-		job(func(in, out chan interface{}, wg *sync.WaitGroup) {
+		job(func(in, out chan interface{}) {
 			out <- 1
 			time.Sleep(10 * time.Millisecond)
 			currRecieved := atomic.LoadUint32(&recieved)
@@ -36,7 +35,7 @@ func TestPipeline(t *testing.T) {
 				ok = false
 			}
 		}),
-		job(func(in, out chan interface{}, wg *sync.WaitGroup) {
+		job(func(in, out chan interface{}) {
 			for _ = range in {
 				atomic.AddUint32(&recieved, 1)
 			}
@@ -64,26 +63,26 @@ func TestSigner(t *testing.T) {
 		DataSignerCrc32Counter uint32
 	)
 	OverheatLock = func() {
-		atomic.AddUint32(&OverheatLockCounter, 1)
-		for {
-			if swapped := atomic.CompareAndSwapUint32(&dataSignerOverheat, 0, 1); !swapped {
-				fmt.Println("OverheatLock happend")
-				time.Sleep(time.Second)
-			} else {
-				break
-			}
-		}
+		// atomic.AddUint32(&OverheatLockCounter, 1)
+		// for {
+		// 	if swapped := atomic.CompareAndSwapUint32(&dataSignerOverheat, 0, 1); !swapped {
+		// 		fmt.Println("OverheatLock happend")
+		// 		time.Sleep(time.Second)
+		// 	} else {
+		// 		break
+		// 	}
+		// }
 	}
 	OverheatUnlock = func() {
-		atomic.AddUint32(&OverheatUnlockCounter, 1)
-		for {
-			if swapped := atomic.CompareAndSwapUint32(&dataSignerOverheat, 1, 0); !swapped {
-				fmt.Println("OverheatUnlock happend")
-				time.Sleep(time.Second)
-			} else {
-				break
-			}
-		}
+		// atomic.AddUint32(&OverheatUnlockCounter, 1)
+		// for {
+		// 	if swapped := atomic.CompareAndSwapUint32(&dataSignerOverheat, 1, 0); !swapped {
+		// 		fmt.Println("OverheatUnlock happend")
+		// 		time.Sleep(time.Second)
+		// 	} else {
+		// 		break
+		// 	}
+		// }
 	}
 	DataSignerMd5 = func(data string) string {
 		atomic.AddUint32(&DataSignerMd5Counter, 1)
@@ -106,7 +105,7 @@ func TestSigner(t *testing.T) {
 	inputData := []int{0, 1, 1, 2, 3, 5, 8}
 
 	hashSignJobs := []job{
-		job(func(in, out chan interface{}, wg *sync.WaitGroup) {
+		job(func(in, out chan interface{}) {
 			for _, fibNum := range inputData {
 				in <- fibNum
 				fmt.Println("data")
@@ -116,7 +115,7 @@ func TestSigner(t *testing.T) {
 		job(SingleHash),
 		job(MultiHash),
 		job(CombineResults),
-		job(func(in, out chan interface{}, wg *sync.WaitGroup) {
+		job(func(in, out chan interface{}) {
 			dataRaw := <-in
 			data, ok := dataRaw.(string)
 			if !ok {

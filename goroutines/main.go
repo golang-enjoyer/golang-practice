@@ -1,5 +1,3 @@
-// main.go
-
 package main
 
 import (
@@ -10,22 +8,63 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 var mu sync.Mutex
 
-func DataSigner(algo, data string) string {
-	if algo == "md5" {
-		return fmt.Sprintf("%x", md5.Sum([]byte(data)))
-	} else if algo == "crc32" {
-		return fmt.Sprintf("%v", crc32.ChecksumIEEE([]byte(data)))
+type job func(in, out chan interface{})
+
+const (
+	MaxInputDataLen = 100
+)
+
+var (
+	dataSignerOverheat uint32 = 0
+	DataSignerSalt            = ""
+)
+
+var OverheatLock = func() {
+	for {
+		if swapped := atomic.CompareAndSwapUint32(&dataSignerOverheat, 0, 1); !swapped {
+			fmt.Println("OverheatLock happend")
+			time.Sleep(time.Second)
+		} else {
+			break
+		}
 	}
-	return data
 }
 
-func SingleHash(in, out chan interface{}, wg *sync.WaitGroup) {
-	defer wg.Done()
+var OverheatUnlock = func() {
+	for {
+		if swapped := atomic.CompareAndSwapUint32(&dataSignerOverheat, 1, 0); !swapped {
+			fmt.Println("OverheatUnlock happend")
+			time.Sleep(time.Second)
+		} else {
+			break
+		}
+	}
+}
 
+var DataSignerMd5 = func(data string) string {
+	OverheatLock()
+	defer OverheatUnlock()
+	data += DataSignerSalt
+	dataHash := fmt.Sprintf("%x", md5.Sum([]byte(data)))
+	time.Sleep(10 * time.Millisecond)
+	return dataHash
+}
+
+var DataSignerCrc32 = func(data string) string {
+	data += DataSignerSalt
+	crcH := crc32.ChecksumIEEE([]byte(data))
+	dataHash := strconv.FormatUint(uint64(crcH), 10)
+	time.Sleep(time.Second)
+	return dataHash
+}
+
+func SingleHash(in, out chan interface{}) {
 	var innerWg sync.WaitGroup
 
 	for dataRaw := range in {
@@ -39,7 +78,9 @@ func SingleHash(in, out chan interface{}, wg *sync.WaitGroup) {
 		go func(data int) {
 			defer innerWg.Done()
 			strData := strconv.Itoa(data)
+			mu.Lock()
 			crc32Md5 := DataSignerCrc32(DataSignerMd5(strData))
+			mu.Unlock()
 			crc32Data := DataSignerCrc32(strData)
 			result := crc32Data + "~" + crc32Md5
 			out <- result
@@ -50,9 +91,7 @@ func SingleHash(in, out chan interface{}, wg *sync.WaitGroup) {
 	close(out)
 }
 
-func MultiHash(in, out chan interface{}, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func MultiHash(in, out chan interface{}) {
 	var innerWg sync.WaitGroup
 
 	for dataRaw := range in {
@@ -78,9 +117,7 @@ func MultiHash(in, out chan interface{}, wg *sync.WaitGroup) {
 	close(out)
 }
 
-func CombineResults(in, out chan interface{}, wg *sync.WaitGroup) {
-	defer wg.Done()
-
+func CombineResults(in, out chan interface{}) {
 	var results []string
 
 	for dataRaw := range in {
@@ -106,18 +143,23 @@ func ExecutePipeline(jobs ...job) {
 	var wg sync.WaitGroup
 	for i, j := range jobs {
 		wg.Add(1)
-		go j(chans[i], chans[i+1], &wg)
+		defer wg.Done()
+		defer close(chans[i+1])
+		go j(chans[i], chans[i+1])
 	}
 
 	wg.Wait()
 }
 
 func main() {
+	now := time.Now()
+	defer func() {
+		fmt.Println("SingleHash done in ", time.Since(now))
+	}()
 	inputData := []int{0, 1, 1, 2, 3, 5, 8}
 
 	hashSignJobs := []job{
-		func(in, out chan interface{}, wg *sync.WaitGroup) {
-			defer wg.Done()
+		func(in, out chan interface{}) {
 			defer close(out)
 			for _, fibNum := range inputData {
 				in <- fibNum
@@ -127,10 +169,11 @@ func main() {
 		SingleHash,
 		MultiHash,
 		CombineResults,
-		func(in, out chan interface{}, wg *sync.WaitGroup) {
-			defer wg.Done()
+		func(in, out chan interface{}) {
 			dataRaw := <-in
+			defer close(out)
 			_, ok := dataRaw.(string)
+			fmt.Println("SingleHash done in ", time.Since(now))
 			if !ok {
 				fmt.Errorf("unable to convert data to string")
 				return
