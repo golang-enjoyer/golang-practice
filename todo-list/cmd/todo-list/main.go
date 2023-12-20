@@ -3,23 +3,20 @@ package main
 import (
 	"net/http"
 	"todo-list/pkg/handlers"
+	"todo-list/pkg/middleware"
+
+	"github.com/gorilla/mux"
 )
 
 func main() {
-	http.HandleFunc("/tasks", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodPost:
-			handlers.CreateTask(w, r)
-		case http.MethodPut:
-			handlers.UpdateTask(w, r)
-		case http.MethodDelete:
-			handlers.DeleteTask(w, r)
-		case http.MethodGet:
-			handlers.GetAllTasks(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
+	router := mux.NewRouter()
 
-	http.ListenAndServe(":8080", nil)
+	router.Use(middleware.LoggerMiddleware)
+
+	router.HandleFunc("/tasks", handlers.CreateTask).Methods(http.MethodPost)
+	router.HandleFunc("/tasks", handlers.GetAllTasks).Methods(http.MethodGet)
+	router.HandleFunc("/tasks/{id}", handlers.UpdateTask).Methods(http.MethodPut)
+	router.HandleFunc("/tasks/{id}", handlers.DeleteTask).Methods(http.MethodDelete)
+
+	http.ListenAndServe("localhost:8080", router)
 }
