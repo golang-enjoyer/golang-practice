@@ -1,3 +1,5 @@
+// handlers/task.go
+
 package handlers
 
 import (
@@ -6,28 +8,22 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"todo-list/pkg/data"
 )
 
-type Task struct {
-	ID    int    `json:"id"`
-	Title string `json:"title"`
-	Done  bool   `json:"done"`
-}
-
-var tasks []Task
-
 func CreateTask(w http.ResponseWriter, r *http.Request) {
-	var newTask Task
+	var newTask data.Task
 	if err := json.NewDecoder(r.Body).Decode(&newTask); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	newTask.ID = len(tasks) + 1
-	tasks = append(tasks, newTask)
+	createdTask := data.CreateTask(newTask)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(newTask)
+	json.NewEncoder(w).Encode(createdTask)
 }
 
 func UpdateTask(w http.ResponseWriter, r *http.Request) {
@@ -39,29 +35,15 @@ func UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var updatedTask Task
-	found := false
-	for i, task := range tasks {
-		if task.ID == taskID {
-			found = true
-
-			if err := json.NewDecoder(r.Body).Decode(&updatedTask); err != nil {
-				http.Error(w, "Invalid request payload", http.StatusBadRequest)
-				return
-			}
-
-			updatedTask.ID = taskID
-			tasks[i] = updatedTask
-
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(updatedTask)
-			return
-		}
-	}
-
-	if !found {
+	var updatedTask data.Task
+	foundErr := data.UpdateTask(updatedTask)
+	if foundErr != nil {
 		http.Error(w, "Task not found", http.StatusNotFound)
+		return
 	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(updatedTask)
 }
 
 func DeleteTask(w http.ResponseWriter, r *http.Request) {
@@ -72,24 +54,18 @@ func DeleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	found := false
-	for i, task := range tasks {
-		if task.ID == taskID {
-			found = true
-
-			tasks = append(tasks[:i], tasks[i+1:]...)
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, "Task deleted successfully")
-			break
-		}
-	}
-
-	if !found {
+	err = data.DeleteTask(taskID)
+	if err != nil {
 		http.Error(w, "Task not found", http.StatusNotFound)
+		return
 	}
+
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, "Task deleted successfully")
 }
 
 func GetAllTasks(w http.ResponseWriter, r *http.Request) {
+	tasks := data.GetAllTasks()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(tasks)
 }
