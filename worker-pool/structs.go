@@ -3,10 +3,10 @@ package main
 import "sync"
 
 type WorkerPool struct {
-	workersAmount int
-	tasks         chan Task
+	numWorkers int
+	tasks      chan Task
 
 	start sync.Once
-	end   sync.Once
 	quit  chan struct{}
+	end   sync.Once
 }

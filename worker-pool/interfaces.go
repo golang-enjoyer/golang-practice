@@ -2,11 +2,11 @@ package main
 
 type Pool interface {
 	Start()
-	Close()
+	Stop()
 	AddTask(Task)
 }
 
 type Task interface {
-	Execute()
+	Execute() error
 	HandleError(error)
 }
