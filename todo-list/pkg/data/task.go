@@ -34,9 +34,10 @@ func (r *TaskRepositoryImpl) CreateTask(newTask Task) Task {
 
 func (r *TaskRepositoryImpl) UpdateTask(updatedTask Task) error {
 	for i, task := range r.tasks {
+		fmt.Println("Task ID", task.ID, "Updated Task ID", updatedTask.ID)
 		if task.ID == updatedTask.ID {
-			updatedTask.ID = task.ID
 			r.tasks[i] = updatedTask
+			fmt.Println("UPDATED Task", updatedTask)
 			return nil
 		}
 	}

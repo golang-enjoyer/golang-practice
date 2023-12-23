@@ -36,13 +36,21 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 
 func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	taskIDStr := strings.TrimPrefix(r.URL.Path, "/tasks/")
-	_, err := strconv.Atoi(taskIDStr)
+	ID, err := strconv.Atoi(taskIDStr)
+
+	fmt.Println(ID, "ID", err)
 	if err != nil {
 		http.Error(w, "Invalid task ID", http.StatusBadRequest)
 		return
 	}
 
 	var updatedTask data.Task
+	updatedTask.ID = ID
+	if err := json.NewDecoder(r.Body).Decode(&updatedTask); err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
 	err = h.taskRepo.UpdateTask(updatedTask)
 	if err != nil {
 		http.Error(w, "Task not found", http.StatusNotFound)
